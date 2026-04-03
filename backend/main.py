@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import json, time, math, os 
+import json, time, math, os
 from algorand_service import AlgorandService
 
 app = FastAPI(title="FreshDrop Pricing Engine", version="1.0.0")
@@ -14,7 +14,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── In-memory product store ──────────────────────────────────
 PRODUCTS = [
     {"id": 1,  "name": "Protein Bar (Mango)",      "category": "Healthy Snacks", "mrp": 120, "cost": 72,  "targetMargin": 28, "stock": 80,  "soldPerDay": 8,  "shelfLife": 30, "daysRemaining": 6},
     {"id": 2,  "name": "Cold Press Orange Juice",   "category": "Fresh Juice",    "mrp": 90,  "cost": 52,  "targetMargin": 25, "stock": 45,  "soldPerDay": 12, "shelfLife": 7,  "daysRemaining": 2},
@@ -30,19 +29,13 @@ PRODUCTS = [
     {"id": 12, "name": "Cheddar Cheese Slice",      "category": "Dairy",          "mrp": 130, "cost": 80,  "targetMargin": 25, "stock": 55,  "soldPerDay": 11, "shelfLife": 21, "daysRemaining": 5},
 ]
 
-# Category-based urgency trigger days
 CATEGORY_TRIGGERS = {
-    "Dairy": 3,
-    "Bakery": 2,
-    "Fresh Juice": 2,
-    "Ready-to-eat": 2,
-    "Healthy Snacks": 7,
-    "Regular Snacks": 14,
+    "Dairy": 3, "Bakery": 2, "Fresh Juice": 2,
+    "Ready-to-eat": 2, "Healthy Snacks": 7, "Regular Snacks": 14,
 }
 
 algo_service = AlgorandService()
 
-# ── Pydantic models ──────────────────────────────────────────
 class OptimizeRequest(BaseModel):
     id: int
     name: str
@@ -71,17 +64,14 @@ class OptimizeResponse(BaseModel):
     algo_address: str
     timestamp: float
 
-# ── Pricing algorithm ────────────────────────────────────────
-def calculate_expiry_score(days_remaining: int, shelf_life: int) -> float:
+def calculate_expiry_score(days_remaining, shelf_life):
     urgency = 1 - (days_remaining / shelf_life)
     return round(min(max(urgency * 100, 0), 100), 2)
 
-def calculate_velocity_multiplier(sold_per_day: float, stock: int, days_remaining: int) -> float:
-    if days_remaining <= 0:
-        return 0.70
+def calculate_velocity_multiplier(sold_per_day, stock, days_remaining):
+    if days_remaining <= 0: return 0.70
     target_per_day = stock / days_remaining
-    if target_per_day == 0:
-        return 1.0
+    if target_per_day == 0: return 1.0
     ratio = sold_per_day / target_per_day
     if ratio >= 1.2: return 1.00
     if ratio >= 0.9: return 0.97
@@ -89,9 +79,7 @@ def calculate_velocity_multiplier(sold_per_day: float, stock: int, days_remainin
     if ratio >= 0.5: return 0.85
     return 0.78
 
-def get_optimal_price(mrp: float, cost: float, target_margin: float,
-                      days_remaining: int, shelf_life: int,
-                      sold_per_day: float, stock: int) -> dict:
+def get_optimal_price(mrp, cost, target_margin, days_remaining, shelf_life, sold_per_day, stock):
     expiry_score = calculate_expiry_score(days_remaining, shelf_life)
     velocity_mult = calculate_velocity_multiplier(sold_per_day, stock, days_remaining)
     min_price = cost * (1 + target_margin / 100)
@@ -107,7 +95,6 @@ def get_optimal_price(mrp: float, cost: float, target_margin: float,
         "actual_margin": actual_margin,
     }
 
-# ── API Endpoints ────────────────────────────────────────────
 @app.get("/")
 def root():
     return {"message": "FreshDrop Pricing Engine API", "version": "1.0.0", "status": "running"}
@@ -116,11 +103,8 @@ def root():
 def get_products():
     result = []
     for p in PRODUCTS:
-        algo = get_optimal_price(
-            p["mrp"], p["cost"], p["targetMargin"],
-            p["daysRemaining"], p["shelfLife"],
-            p["soldPerDay"], p["stock"]
-        )
+        algo = get_optimal_price(p["mrp"], p["cost"], p["targetMargin"],
+                                 p["daysRemaining"], p["shelfLife"], p["soldPerDay"], p["stock"])
         trigger = CATEGORY_TRIGGERS.get(p["category"], 3)
         status = "critical" if (p["daysRemaining"] / p["shelfLife"]) <= 0.2 or p["daysRemaining"] <= 2 \
                  else "warning" if (p["daysRemaining"] / p["shelfLife"]) <= 0.4 or p["daysRemaining"] <= 5 \
@@ -129,45 +113,27 @@ def get_products():
                         "is_triggered": p["daysRemaining"] <= trigger, "status": status})
     return result
 
-@app.post("/optimize", response_model=OptimizeResponse)
+@app.post("/optimize")
 async def optimize_price(req: OptimizeRequest):
-    algo = get_optimal_price(
-        req.mrp, req.cost, req.targetMargin,
-        req.daysRemaining, req.shelfLife,
-        req.soldPerDay, req.stock
-    )
+    algo = get_optimal_price(req.mrp, req.cost, req.targetMargin,
+                             req.daysRemaining, req.shelfLife, req.soldPerDay, req.stock)
     trigger = CATEGORY_TRIGGERS.get(req.category, 3)
-
     note_data = {
-        "product_id": req.id,
-        "product_name": req.name,
-        "category": req.category,
-        "old_price": req.mrp,
-        "new_price": algo["optimal_price"],
-        "margin": algo["actual_margin"],
-        "expiry_score": algo["expiry_score"],
-        "velocity_mult": algo["velocity_multiplier"],
+        "product_id": req.id, "product_name": req.name,
+        "old_price": req.mrp, "new_price": algo["optimal_price"],
+        "margin": algo["actual_margin"], "expiry_score": algo["expiry_score"],
         "timestamp": int(time.time())
     }
-
     txid, explorer_url = await algo_service.record_price_update(note_data)
-
-    return OptimizeResponse(
-        product_id=req.id,
-        product_name=req.name,
-        old_price=req.mrp,
-        optimal_price=algo["optimal_price"],
-        margin_pct=algo["actual_margin"],
-        expiry_score=algo["expiry_score"],
-        velocity_multiplier=algo["velocity_multiplier"],
-        trigger_days=trigger,
-        is_triggered=req.daysRemaining <= trigger,
-        min_price=algo["min_price"],
-        txid=txid,
-        explorer_url=explorer_url,
-        algo_address=algo_service.address,
-        timestamp=time.time()
-    )
+    return {
+        "product_id": req.id, "product_name": req.name,
+        "old_price": req.mrp, "optimal_price": algo["optimal_price"],
+        "margin_pct": algo["actual_margin"], "expiry_score": algo["expiry_score"],
+        "velocity_multiplier": algo["velocity_multiplier"],
+        "trigger_days": trigger, "is_triggered": req.daysRemaining <= trigger,
+        "min_price": algo["min_price"], "txid": txid, "explorer_url": explorer_url,
+        "algo_address": algo_service.address, "timestamp": time.time()
+    }
 
 @app.get("/wallet")
 def get_wallet():
