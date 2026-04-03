@@ -22,3 +22,4 @@ def test():
 @app.get("/")
 def serve():
     return FileResponse("frontend/index.html")
+return FileResponse("index.html")
