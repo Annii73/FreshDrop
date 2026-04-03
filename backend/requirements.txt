@@ -1,5 +1,5 @@
-fastapi==0.100.0
-uvicorn[standard]==0.23.0
-py-algorand-sdk==2.6.1
-pydantic==1.10.13
-httpx==0.24.1
+fastapi
+uvicorn[standard]
+py-algorand-sdk
+pydantic
+httpx
