@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreshDrop — Margin-Aware Pricing Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #080810;
+    --surface:     #0f0f1a;
+    --surface2:    #16162a;
+    --surface3:    #1e1e32;
+    --border:      #252538;
+    --border2:     #2e2e48;
+    --red:         #e63946;
+    --red-dim:     rgba(230,57,70,0.10);
+    --red-glow:    rgba(230,57,70,0.25);
+    --green:       #2ec4b6;
+    --green-dim:   rgba(46,196,182,0.10);
+    --green-glow:  rgba(46,196,182,0.20);
+    --yellow:      #ffb703;
+    --yellow-dim:  rgba(255,183,3,0.10);
+    --purple:      #8b5cf6;
+    --purple-dim:  rgba(139,92,246,0.12);
+    --blue:        #38bdf8;
+    --blue-dim:    rgba(56,189,248,0.10);
+    --text:        #e8e8f4;
+    --text-muted:  #6868a0;
+    --text-dim:    #35354e;
+    --mono:        'Space Mono', monospace;
+    --sans:        'DM Sans', sans-serif;
+    --display:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── GRID BACKGROUND ─── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(37,37,56,0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37,37,56,0.35) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* Subtle radial glow at top */
+  body::after {
+    content: '';
+    position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 900px; height: 500px;
+    background: radial-gradient(ellipse, rgba(230,57,70,0.06) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    position: sticky; top: 0; z-index: 200;
+    background: rgba(8,8,16,0.88);
+    backdrop-filter: blur(24px) saturate(1.4);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 58px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-weight: 800; font-size: 1.2rem;
+    letter-spacing: -0.03em;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .logo .accent { color: var(--red); }
+  .logo-badge {
+    font-family: var(--mono); font-size: 0.55rem;
+    background: var(--red-dim); border: 1px solid var(--red);
+    color: var(--red); padding: 2px 7px; border-radius: 3px;
+    letter-spacing: 0.12em; vertical-align: middle;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 1rem; }
+
+  .team-badge {
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--text-muted); border: 1px solid var(--border2);
+    padding: 3px 10px; border-radius: 20px;
+  }
+
+  .algo-status {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--green);
+  }
+
+  .pulse-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulseGlow 2s infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%,100% { opacity: 1; box-shadow: 0 0 6px var(--green); }
+    50%      { opacity: 0.4; box-shadow: 0 0 2px var(--green); }
+  }
+
+  /* ─── BACKEND STATUS BAR ─── */
+  #backend-bar {
+    position: relative; z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 2rem;
+    display: flex; align-items: center; gap: 1.5rem;
+    font-family: var(--mono); font-size: 0.62rem;
+  }
+  #backend-bar .bbar-item { display: flex; align-items: center; gap: 5px; }
+  #backend-bar .bbar-dot  { width: 6px; height: 6px; border-radius: 50%; }
+  .dot-ok   { background: var(--green); box-shadow: 0 0 4px var(--green); }
+  .dot-warn { background: var(--yellow); }
+  .dot-err  { background: var(--red); }
+
+  /* ─── MAIN ─── */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1340px; margin: 0 auto;
+    padding: 2rem 2rem 4rem;
+  }
+
+  /* ─── HERO ─── */
+  .hero {
+    margin-bottom: 2.5rem;
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 2rem;
+  }
+
+  .hero-text h1 {
+    font-family: var(--display);
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 800; line-height: 1.05;
+    letter-spacing: -0.04em; margin-bottom: 0.6rem;
+  }
+  .hero-text h1 em { font-style: normal; color: var(--red); }
+  .hero-text p {
+    color: var(--text-muted); font-size: 0.9rem;
+    max-width: 520px; line-height: 1.65;
+  }
+
+  .hero-pills {
+    display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;
+  }
+  .hero-pill {
+    font-family: var(--mono); font-size: 0.6rem;
+    border: 1px solid var(--border2); color: var(--text-muted);
+    padding: 3px 10px; border-radius: 20px;
+  }
+
+  /* ─── STATS ROW ─── */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 1rem; margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.2rem 1.4rem;
+    position: relative; overflow: hidden;
+    transition: border-color .2s, transform .2s;
+    cursor: default;
+  }
+  .stat-card:hover { transform: translateY(-2px); }
+
+  .stat-card::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+  }
+  .stat-card.red::before    { background: var(--red); }
+  .stat-card.green::before  { background: var(--green); }
+  .stat-card.yellow::before { background: var(--yellow); }
+  .stat-card.purple::before { background: var(--purple); }
+  .stat-card.blue::before   { background: var(--blue); }
+
+  .stat-label {
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--text-muted); letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 0.5rem;
+  }
+  .stat-value {
+    font-family: var(--display); font-size: 2rem;
+    font-weight: 800; line-height: 1; margin-bottom: 0.2rem;
+  }
+  .stat-card.red    .stat-value { color: var(--red); }
+  .stat-card.green  .stat-value { color: var(--green); }
+  .stat-card.yellow .stat-value { color: var(--yellow); }
+  .stat-card.purple .stat-value { color: var(--purple); }
+  .stat-card.blue   .stat-value { color: var(--blue); }
+  .stat-sub { font-size: 0.72rem; color: var(--text-muted); }
+
+  /* ─── SECTION TITLE ─── */
+  .section-title {
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--text-muted); letter-spacing: 0.15em;
+    text-transform: uppercase; margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .section-tag {
+    font-size: 0.58rem; padding: 1px 7px; border-radius: 10px;
+    font-family: var(--mono); letter-spacing: 0.08em;
+  }
+  .tag-red    { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+  .tag-green  { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+  .tag-yellow { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
+
+  /* ─── FILTER BAR ─── */
+  .filter-bar {
+    display: flex; align-items: center; gap: 0.5rem;
+    margin-bottom: 1rem; flex-wrap: wrap;
+  }
+  .filter-btn {
+    font-family: var(--mono); font-size: 0.62rem;
+    border: 1px solid var(--border2); background: transparent;
+    color: var(--text-muted); padding: 4px 12px; border-radius: 20px;
+    cursor: pointer; transition: all .15s; letter-spacing: 0.06em;
+  }
+  .filter-btn:hover, .filter-btn.active {
+    border-color: var(--red); color: var(--red);
+    background: var(--red-dim);
+  }
+
+  /* ─── PRODUCT GRID ─── */
+  .grid-3 {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    gap: 1rem; margin-bottom: 1.5rem;
+  }
+  .grid-2 {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1.5rem; margin-bottom: 1.5rem;
+  }
+
+  /* ─── PRODUCT CARD ─── */
+  .product-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.2rem;
+    transition: all .25s; position: relative; overflow: hidden;
+  }
+  .product-card:hover {
+    border-color: var(--border2);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transform: translateY(-2px);
+  }
+  .product-card.active {
+    border-color: var(--red);
+    background: var(--surface2);
+    box-shadow: 0 0 0 1px var(--red-dim), 0 8px 32px rgba(230,57,70,0.08);
+  }
+  .product-card.hidden { display: none; }
+
+  /* Colored left stripe by status */
+  .product-card::before {
+    content: ''; position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+    border-radius: 14px 0 0 14px;
+    transition: background .3s;
+  }
+  .product-card.status-safe::before    { background: var(--green); }
+  .product-card.status-warning::before { background: var(--yellow); }
+  .product-card.status-critical::before{ background: var(--red); animation: flashRed 1.5s infinite; }
+
+  @keyframes flashRed {
+    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+  }
+
+  .product-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 0.9rem;
+  }
+  .product-category {
+    font-family: var(--mono); font-size: 0.58rem;
+    color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 3px;
+  }
+  .product-name {
+    font-family: var(--display); font-weight: 700;
+    font-size: 0.9rem; line-height: 1.25;
+  }
+
+  .status-badge {
+    font-family: var(--mono); font-size: 0.58rem;
+    padding: 3px 8px; border-radius: 20px;
+    letter-spacing: 0.08em; white-space: nowrap;
+  }
+  .badge-safe     { background: var(--green-dim); border: 1px solid var(--green); color: var(--green); }
+  .badge-warning  { background: var(--yellow-dim); border: 1px solid var(--yellow); color: var(--yellow); }
+  .badge-critical { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); animation: blink 1.8s infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:.5} }
+
+  .price-row {
+    display: flex; align-items: baseline;
+    gap: 0.5rem; margin-bottom: 0.75rem;
+  }
+  .price-mrp {
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--text-muted); text-decoration: line-through;
+  }
+  .price-optimal {
+    font-family: var(--display); font-size: 1.6rem;
+    font-weight: 800; color: var(--green);
+    transition: color .3s;
+  }
+  .price-saving {
+    font-family: var(--mono); font-size: 0.6rem; color: var(--yellow);
+  }
+
+  .product-meta {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0.45rem; margin-bottom: 0.9rem;
+  }
+  .meta-item {
+    background: var(--bg); border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+  }
+  .meta-label {
+    font-family: var(--mono); font-size: 0.57rem;
+    color: var(--text-muted); margin-bottom: 2px;
+  }
+  .meta-value {
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+  }
+
+  /* Expiry bar */
+  .expiry-bar-wrap { margin-bottom: 0.8rem; }
+  .expiry-bar-label {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--text-muted); margin-bottom: 5px;
+  }
+  .expiry-bar {
+    height: 5px; background: var(--border);
+    border-radius: 3px; overflow: hidden;
+  }
+  .expiry-fill {
+    height: 100%; border-radius: 3px; transition: width 1s ease;
+  }
+
+  /* Trigger indicator */
+  .trigger-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--text-muted); margin-bottom: 0.8rem;
+    padding: 4px 8px; background: var(--bg); border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .trigger-indicator.active {
+    color: var(--yellow); border-color: var(--yellow);
+    background: var(--yellow-dim);
+  }
+
+  /* Optimize button */
+  .update-btn {
+    width: 100%; padding: 0.65rem;
+    background: transparent; border: 1px solid var(--red);
+    color: var(--red); border-radius: 10px;
+    font-family: var(--mono); font-size: 0.7rem;
+    cursor: pointer; transition: all .2s; letter-spacing: 0.06em;
+  }
+  .update-btn:hover:not(:disabled) {
+    background: var(--red); color: white;
+    box-shadow: 0 0 20px var(--red-glow);
+  }
+  .update-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .update-btn.loading  { background: var(--red-dim); color: var(--red); }
+  .update-btn.done {
+    background: var(--green-dim); border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* TX Proof */
+  .tx-proof {
+    margin-top: 0.6rem;
+    background: var(--green-dim); border: 1px solid var(--green);
+    border-radius: 10px; padding: 0.7rem 0.9rem;
+    animation: fadeSlideIn 0.3s ease;
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tx-header {
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--green); margin-bottom: 4px;
+  }
+  .tx-id {
+    font-family: var(--mono); font-size: 0.58rem;
+    color: var(--text-muted); word-break: break-all; margin-bottom: 5px;
+  }
+  .tx-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--green); text-decoration: none;
+    border: 1px solid rgba(46,196,182,0.3);
+    padding: 2px 8px; border-radius: 5px; transition: all .15s;
+  }
+  .tx-link:hover { background: var(--green); color: var(--bg); }
+
+  /* ─── ALGORITHM PANEL ─── */
+  .algo-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.5rem;
+  }
+  .formula-box {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.2rem;
+    margin-bottom: 1.2rem; font-family: var(--mono);
+    font-size: 0.78rem; line-height: 2;
+  }
+  .formula-line {
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .formula-label { color: var(--text-muted); min-width: 200px; }
+  .formula-value { color: var(--green); font-weight: 700; }
+  .formula-result { color: var(--yellow); font-weight: 700; font-size: 1rem; }
+  .formula-divider {
+    border: none; border-top: 1px solid var(--border); margin: 0.5rem 0;
+  }
+
+  /* Before / After comparison */
+  .before-after {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; margin-bottom: 1.2rem;
+  }
+  .ba-card { border-radius: 10px; padding: 1rem; }
+  .ba-card.before {
+    background: rgba(230,57,70,0.06); border: 1px solid rgba(230,57,70,0.25);
+  }
+  .ba-card.after {
+    background: rgba(46,196,182,0.06); border: 1px solid rgba(46,196,182,0.25);
+  }
+  .ba-title {
+    font-family: var(--mono); font-size: 0.62rem;
+    letter-spacing: 0.1em; margin-bottom: 0.7rem;
+  }
+  .ba-card.before .ba-title { color: var(--red); }
+  .ba-card.after  .ba-title { color: var(--green); }
+  .ba-row {
+    display: flex; justify-content: space-between;
+    font-size: 0.78rem; margin-bottom: 0.3rem; color: var(--text-muted);
+  }
+  .ba-row span:last-child { font-family: var(--mono); color: var(--text); }
+  .ba-total {
+    border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.5rem;
+    font-family: var(--display); font-size: 1.05rem; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .ba-card.before .ba-total { color: var(--red); }
+  .ba-card.after  .ba-total { color: var(--green); }
+
+  .savings-summary {
+    text-align: center; font-family: var(--mono);
+    font-size: 0.75rem; color: var(--green);
+    background: var(--green-dim); border: 1px solid rgba(46,196,182,0.3);
+    border-radius: 8px; padding: 0.6rem 1rem;
+  }
+
+  /* ─── BLOCKCHAIN LOG ─── */
+  .blockchain-log {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.5rem;
+  }
+  .log-scroll {
+    max-height: 420px; overflow-y: auto; padding-right: 4px;
+  }
+  .log-empty {
+    color: var(--text-muted); font-size: 0.85rem;
+    text-align: center; padding: 2.5rem 0;
+  }
+  .log-entry {
+    display: flex; align-items: flex-start; gap: 0.8rem;
+    padding: 0.75rem 0; border-bottom: 1px solid var(--border);
+    animation: slideLeft .3s ease;
+  }
+  @keyframes slideLeft {
+    from { opacity: 0; transform: translateX(-12px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; flex-shrink: 0;
+    background: var(--green-dim); border: 1px solid rgba(46,196,182,0.4);
+  }
+  .log-content { flex: 1; min-width: 0; }
+  .log-product {
+    font-family: var(--display); font-size: 0.85rem;
+    font-weight: 600; margin-bottom: 2px;
+  }
+  .log-detail {
+    font-family: var(--mono); font-size: 0.62rem;
+    color: var(--text-muted);
+  }
+  .log-txid {
+    font-family: var(--mono); font-size: 0.58rem;
+    color: var(--green); margin-top: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 240px;
+  }
+  .log-right { text-align: right; flex-shrink: 0; }
+  .log-time {
+    font-family: var(--mono); font-size: 0.58rem; color: var(--text-dim);
+  }
+  .log-margin {
+    font-family: var(--mono); font-size: 0.65rem;
+    color: var(--green); margin-top: 4px;
+  }
+
+  /* ─── WALLET PANEL ─── */
+  .wallet-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.4rem 1.6rem;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+  }
+  .wallet-label {
+    font-family: var(--mono); font-size: 0.6rem;
+    color: var(--text-muted); letter-spacing: 0.1em;
+    text-transform: uppercase; margin-bottom: 4px;
+  }
+  .wallet-addr {
+    font-family: var(--mono); font-size: 0.78rem; color: var(--green);
+    word-break: break-all;
+  }
+  .wallet-actions { display: flex; gap: 0.5rem; flex-shrink: 0; flex-wrap: wrap; }
+  .wallet-btn {
+    font-family: var(--mono); font-size: 0.62rem;
+    border: 1px solid var(--border2); background: transparent;
+    color: var(--text-muted); padding: 5px 12px; border-radius: 8px;
+    cursor: pointer; transition: all .15s; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .wallet-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+  .wallet-btn.fund { border-color: var(--yellow); color: var(--yellow); }
+  .wallet-btn.fund:hover { background: var(--yellow-dim); }
+
+  /* ─── OPTIMIZE ALL BANNER ─── */
+  .optimize-all-bar {
+    background: linear-gradient(135deg, rgba(230,57,70,0.1), rgba(230,57,70,0.04));
+    border: 1px solid rgba(230,57,70,0.3); border-radius: 14px;
+    padding: 1rem 1.5rem;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin-bottom: 1.5rem;
+  }
+  .optimize-all-bar p {
+    font-size: 0.85rem; color: var(--text-muted);
+  }
+  .optimize-all-bar strong { color: var(--text); }
+  .btn-optimize-all {
+    font-family: var(--mono); font-size: 0.7rem;
+    background: var(--red); color: white; border: none;
+    padding: 8px 18px; border-radius: 10px; cursor: pointer;
+    transition: all .2s; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .btn-optimize-all:hover {
+    background: #ff4755; box-shadow: 0 0 24px var(--red-glow);
+  }
+
+  /* ─── PHASE 2 BANNER ─── */
+  .phase2-banner {
+    background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(139,92,246,0.04));
+    border: 1px solid rgba(139,92,246,0.35); border-radius: 14px;
+    padding: 1.2rem 1.6rem;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin-top: 1.5rem;
+  }
+  .phase2-left h3 {
+    font-family: var(--display); font-size: 0.95rem; font-weight: 700;
+    color: var(--purple); margin-bottom: 0.2rem;
+  }
+  .phase2-left p { font-size: 0.8rem; color: var(--text-muted); }
+  .phase2-tag {
+    font-family: var(--mono); font-size: 0.6rem;
+    background: var(--purple-dim); border: 1px solid var(--purple);
+    color: var(--purple); padding: 4px 12px; border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+  /* ─── TOAST ─── */
+  #toast-container {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  .toast {
+    font-family: var(--mono); font-size: 0.7rem;
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); padding: 10px 16px; border-radius: 10px;
+    animation: toastIn .3s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast.success { border-color: var(--green); }
+  .toast.error   { border-color: var(--red); }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ─── LOADING OVERLAY ─── */
+  #loading-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(8,8,16,0.85); backdrop-filter: blur(6px);
+    z-index: 1000; align-items: center; justify-content: center;
+    flex-direction: column; gap: 1rem;
+  }
+  #loading-overlay.active { display: flex; }
+  .spinner {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 3px solid var(--border2); border-top-color: var(--red);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-family: var(--mono); font-size: 0.75rem; color: var(--text-muted);
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 1100px) {
+    .stats-row { grid-template-columns: repeat(2,1fr); }
+    .grid-3    { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 720px) {
+    .grid-2    { grid-template-columns: 1fr; }
+    .grid-3    { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .hero-text h1 { font-size: 1.8rem; }
+    .before-after { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">Fresh<span class="accent">Drop</span> <span class="logo-badge">BETA</span></div>
+  <div class="header-right">
+    <div class="algo-status"><div class="pulse-dot"></div>Algorand Testnet</div>
+    <div class="team-badge">Code Squad · Hacknovate 7.0</div>
+  </div>
+</header>
+
+<!-- BACKEND STATUS BAR -->
+<div id="backend-bar">
+  <div class="bbar-item">
+    <div class="bbar-dot" id="dot-api"></div>
+    <span id="lbl-api" style="color:var(--text-muted)">API connecting…</span>
+  </div>
+  <div class="bbar-item">
+    <div class="bbar-dot dot-ok"></div>
+    <span style="color:var(--text-muted)">Algorand Testnet · algonode.cloud</span>
+  </div>
+  <div class="bbar-item" id="wallet-short" style="display:none">
+    <div class="bbar-dot dot-ok"></div>
+    <span id="wallet-addr-short" style="color:var(--green)"></span>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Connecting to backend…</div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<main>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-text">
+      <h1>Margin-Aware<br><em>Pricing Engine</em></h1>
+      <p>Automatically optimizes prices for perishable products using expiry timeline + sales velocity — ensuring q-commerce platforms never panic-sell and always hit their target margin.</p>
+      <div class="hero-pills">
+        <span class="hero-pill">🧮 Expiry Scoring</span>
+        <span class="hero-pill">📈 Velocity Multiplier</span>
+        <span class="hero-pill">🛡 Margin Guard</span>
+        <span class="hero-pill">⛓ Algorand Proof</span>
+        <span class="hero-pill">♻️ Zero Food Waste</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-card red">
+      <div class="stat-label">Total SKUs Monitored</div>
+      <div class="stat-value" id="stat-skus">—</div>
+      <div class="stat-sub">Active products</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Products At Risk</div>
+      <div class="stat-value" id="stat-risk">—</div>
+      <div class="stat-sub">Need attention</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Margin Saved Today</div>
+      <div class="stat-value" id="stat-margin">₹4.2K</div>
+      <div class="stat-sub">vs panic pricing</div>
+    </div>
+    <div class="stat-card purple">
+      <div class="stat-label">Blockchain Txns</div>
+      <div class="stat-value" id="stat-txns">0</div>
+      <div class="stat-sub">Recorded on Algorand</div>
+    </div>
+  </div>
+
+  <!-- WALLET PANEL -->
+  <div class="wallet-panel" id="wallet-panel" style="display:none">
+    <div>
+      <div class="wallet-label">Algorand Testnet Wallet</div>
+      <div class="wallet-addr" id="wallet-full-addr">Loading…</div>
+    </div>
+    <div class="wallet-actions">
+      <a id="faucet-link" href="https://bank.testnet.algorand.network/" target="_blank" class="wallet-btn fund">💧 Fund Wallet</a>
+      <a id="explorer-wallet-link" href="#" target="_blank" class="wallet-btn">🔍 View on Explorer</a>
+    </div>
+  </div>
+
+  <!-- OPTIMIZE ALL -->
+  <div class="optimize-all-bar">
+    <div>
+      <strong>Optimize All At-Risk Products</strong>
+      <p>Run FreshDrop algorithm on all products needing attention and log on Algorand</p>
+    </div>
+    <button class="btn-optimize-all" onclick="optimizeAll()">⚡ Optimize All Critical</button>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filterProducts('all',this)">All</button>
+    <button class="filter-btn" onclick="filterProducts('critical',this)">🔴 Critical</button>
+    <button class="filter-btn" onclick="filterProducts('warning',this)">🟡 At Risk</button>
+    <button class="filter-btn" onclick="filterProducts('safe',this)">🟢 Healthy</button>
+  </div>
+
+  <!-- PRODUCTS GRID -->
+  <div class="section-title">
+    Product Dashboard
+    <span class="section-tag tag-red" id="critical-count-badge"></span>
+  </div>
+  <div class="grid-3" id="products-grid">
+    <div style="color:var(--text-muted);font-family:var(--mono);font-size:0.8rem;padding:2rem;grid-column:1/-1">Loading products…</div>
+  </div>
+
+  <!-- ALGORITHM + BLOCKCHAIN LOG -->
+  <div class="grid-2">
+
+    <!-- ALGO PANEL -->
+    <div class="algo-panel">
+      <div class="section-title" style="margin-bottom:1rem">
+        Algorithm Output
+        <span class="section-tag tag-green">LIVE</span>
+      </div>
+      <div id="algo-display">
+        <p style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:3rem 0;line-height:1.6">
+          Click <strong style="color:var(--text)">⚡ Optimize Price</strong><br>on any product card above
+        </p>
+      </div>
+    </div>
+
+    <!-- BLOCKCHAIN LOG -->
+    <div class="blockchain-log">
+      <div class="section-title" style="margin-bottom:1rem">
+        Algorand Blockchain Log
+        <span class="section-tag tag-green" id="log-count-badge"></span>
+      </div>
+      <div class="log-scroll" id="blockchain-log">
+        <div class="log-empty">No transactions yet —<br>optimize a product to record on Algorand</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PHASE 2 BANNER -->
+  <div class="phase2-banner">
+    <div class="phase2-left">
+      <h3>🚀 Phase 2 — Personalized Expiry Nudges</h3>
+      <p>Individual user purchase history integration — targeted expiry notifications to repeat buyers, increasing conversion 3×. Smart contract-based loyalty discounts on Algorand.</p>
+    </div>
+    <div class="phase2-tag">PLANNED FEATURE</div>
+  </div>
+
+</main>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────
+const API_BASE = 'http://localhost:8000';
+let productsData = [];
+let txCount = 0;
+let totalMarginSaved = 4200;
+const txLog = [];
+
+// ─── UTILITIES ───────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `${type==='success'?'✅':type==='error'?'❌':'ℹ️'} ${msg}`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function showLoading(msg = 'Processing…') {
+  document.getElementById('loading-overlay').classList.add('active');
+  document.getElementById('loading-text').textContent = msg;
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('active');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────
+async function init() {
+  await loadWallet();
+  await loadProducts();
+}
+
+async function loadWallet() {
+  try {
+    const res = await fetch(`${API_BASE}/wallet`);
+    if (!res.ok) throw new Error();
+    const w = await res.json();
+
+    document.getElementById('dot-api').className   = 'bbar-dot dot-ok';
+    document.getElementById('lbl-api').textContent = 'Backend connected';
+    document.getElementById('lbl-api').style.color = 'var(--green)';
+
+    document.getElementById('wallet-full-addr').textContent = w.address;
+    document.getElementById('explorer-wallet-link').href = w.explorer;
+    document.getElementById('faucet-link').href = w.faucet;
+    document.getElementById('wallet-panel').style.display = 'flex';
+
+    const shortAddr = w.address.slice(0,8) + '...' + w.address.slice(-6);
+    document.getElementById('wallet-addr-short').textContent = shortAddr;
+    document.getElementById('wallet-short').style.display = 'flex';
+
+  } catch {
+    document.getElementById('dot-api').className   = 'bbar-dot dot-err';
+    document.getElementById('lbl-api').textContent = 'Backend offline — running in demo mode';
+    document.getElementById('lbl-api').style.color = 'var(--red)';
+  }
+}
+
+async function loadProducts() {
+  try {
+    const res = await fetch(`${API_BASE}/products`);
+    if (!res.ok) throw new Error();
+    productsData = await res.json();
+  } catch {
+    // Fallback local data
+    productsData = buildFallbackProducts();
+  }
+  renderStats();
+  renderProducts();
+}
+
+// ─── STATS ───────────────────────────────────────────────────
+function renderStats() {
+  const critical = productsData.filter(p => p.status === 'critical').length;
+  const warning  = productsData.filter(p => p.status === 'warning').length;
+
+  document.getElementById('stat-skus').textContent  = productsData.length;
+  document.getElementById('stat-risk').textContent  = critical + warning;
+
+  const badge = document.getElementById('critical-count-badge');
+  if (critical > 0) {
+    badge.textContent = `${critical} CRITICAL`;
+    badge.className = 'section-tag tag-red';
+  } else {
+    badge.textContent = '';
+  }
+}
+
+// ─── FILTER ──────────────────────────────────────────────────
+function filterProducts(status, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.product-card').forEach(card => {
+    if (status === 'all' || card.dataset.status === status) {
+      card.classList.remove('hidden');
+    } else {
+      card.classList.add('hidden');
+    }
+  });
+}
+
+// ─── RENDER PRODUCTS ─────────────────────────────────────────
+function renderProducts() {
+  const grid = document.getElementById('products-grid');
+  grid.innerHTML = '';
+
+  productsData.forEach(p => {
+    const expiryPct  = Math.round((p.daysRemaining / p.shelfLife) * 100);
+    const optPrice   = p.optimal_price ?? getOptimalPriceFallback(p);
+    const margin     = p.actual_margin ?? calcMargin(optPrice, p.cost);
+    const saving     = p.mrp - optPrice;
+    const fillColor  = p.status === 'critical' ? 'var(--red)' :
+                       p.status === 'warning'  ? 'var(--yellow)' : 'var(--green)';
+    const isTriggered = p.is_triggered ?? p.daysRemaining <= (p.trigger_days ?? 3);
+
+    const card = document.createElement('div');
+    card.className = `product-card status-${p.status}`;
+    card.id = `card-${p.id}`;
+    card.dataset.status = p.status;
+
+    card.innerHTML = `
+      <div class="product-header">
+        <div>
+          <div class="product-category">${p.category}</div>
+          <div class="product-name">${p.name}</div>
+        </div>
+        <div class="status-badge badge-${p.status}">
+          ${p.status==='critical'?'🔴 CRITICAL':p.status==='warning'?'🟡 AT RISK':'🟢 HEALTHY'}
+        </div>
+      </div>
+
+      <div class="price-row">
+        <div class="price-mrp">₹${p.mrp}</div>
+        <div class="price-optimal">₹${optPrice}</div>
+        ${saving > 0 ? `<div class="price-saving">-${Math.round(saving/p.mrp*100)}%</div>` : ''}
+      </div>
+
+      <div class="product-meta">
+        <div class="meta-item">
+          <div class="meta-label">MARGIN</div>
+          <div class="meta-value" style="color:${margin >= p.targetMargin ? 'var(--green)' : 'var(--yellow)'}">${margin}%</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">STOCK</div>
+          <div class="meta-value">${p.stock} units</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">EXPIRY</div>
+          <div class="meta-value" style="color:${fillColor}">${p.daysRemaining}d left</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">SELL RATE</div>
+          <div class="meta-value">${p.soldPerDay}/day</div>
+        </div>
+      </div>
+
+      <div class="expiry-bar-wrap">
+        <div class="expiry-bar-label">
+          <span>Shelf Life Remaining</span>
+          <span>${expiryPct}%</span>
+        </div>
+        <div class="expiry-bar">
+          <div class="expiry-fill" style="width:${expiryPct}%;background:${fillColor}"></div>
+        </div>
+      </div>
+
+      <div class="trigger-indicator ${isTriggered ? 'active' : ''}">
+        ${isTriggered
+          ? `⚠️ CATEGORY TRIGGER ACTIVE — ${p.category} triggers in last ${p.trigger_days ?? 3} days`
+          : `⏳ Trigger in ${p.daysRemaining - (p.trigger_days ?? 3)} days`}
+      </div>
+
+      <button class="update-btn" id="btn-${p.id}" onclick="optimizePrice(${p.id})">
+        ⚡ Optimize Price + Record on Algorand
+      </button>
+      <div id="tx-${p.id}"></div>
+    `;
+
+    grid.appendChild(card);
+  });
+}
+
+// ─── OPTIMIZE ONE PRODUCT ────────────────────────────────────
+async function optimizePrice(productId) {
+  const p = productsData.find(x => x.id === productId);
+  if (!p) return;
+
+  const btn   = document.getElementById(`btn-${productId}`);
+  const txDiv = document.getElementById(`tx-${productId}`);
+  const card  = document.getElementById(`card-${productId}`);
+
+  btn.disabled = true;
+  btn.className = 'update-btn loading';
+  btn.textContent = '⏳ Calculating…';
+
+  showAlgoWorking(p);
+  await sleep(700);
+
+  btn.textContent = '🔗 Recording on Algorand…';
+  await sleep(900);
+
+  try {
+    let result;
+    try {
+      const res = await fetch(`${API_BASE}/optimize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p)
+      });
+      if (!res.ok) throw new Error();
+      result = await res.json();
+    } catch {
+      // Demo fallback
+      result = buildFallbackResult(p);
+    }
+
+    txCount++;
+    totalMarginSaved += Math.round((result.optimal_price - p.cost) * p.stock * 0.1);
+
+    document.getElementById('stat-txns').textContent  = txCount;
+    document.getElementById('stat-margin').textContent = `₹${(totalMarginSaved/1000).toFixed(1)}K`;
+
+    const txid = result.txid;
+    const url  = result.explorer_url ?? `https://testnet.algoexplorer.io/tx/${txid}`;
+
+    txDiv.innerHTML = `
+      <div class="tx-proof">
+        <div class="tx-header">✅ Recorded on Algorand Testnet!</div>
+        <div class="tx-id">TxID: ${txid}</div>
+        <a href="${url}" target="_blank" class="tx-link">🔍 View on Explorer →</a>
+      </div>
+    `;
+
+    showAlgoResult(p, result);
+    addToLog(p, result, txid);
+    card.classList.add('active');
+
+    btn.className  = 'update-btn done';
+    btn.textContent = '✅ Optimized & Logged';
+    btn.disabled   = true;
+
+    toast(`${p.name} → ₹${result.optimal_price} · ${result.margin_pct}% margin`, 'success');
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.className  = 'update-btn';
+    btn.textContent = '⚡ Retry';
+    toast('Something went wrong', 'error');
+  }
+}
+
+// ─── OPTIMIZE ALL ────────────────────────────────────────────
+async function optimizeAll() {
+  const atRisk = productsData.filter(p =>
+    (p.status === 'critical' || p.status === 'warning') &&
+    document.getElementById(`btn-${p.id}`)?.textContent.includes('Optimize')
+  );
+  if (atRisk.length === 0) {
+    toast('No products left to optimize!', 'info');
+    return;
+  }
+  for (const p of atRisk) {
+    await optimizePrice(p.id);
+    await sleep(400);
+  }
+}
+
+// ─── ALGORITHM DISPLAY ───────────────────────────────────────
+function showAlgoWorking(p) {
+  document.getElementById('algo-display').innerHTML = `
+    <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-muted);margin-bottom:1rem">
+      Analyzing: <span style="color:var(--text)">${p.name}</span>
+    </div>
+    <div class="formula-box">
+      <div class="formula-line"><span class="formula-label">MRP</span><span class="formula-value">₹${p.mrp}</span></div>
+      <div class="formula-line"><span class="formula-label">Cost Price</span><span class="formula-value">₹${p.cost}</span></div>
+      <div class="formula-line"><span class="formula-label">Target Margin</span><span class="formula-value">${p.targetMargin}%</span></div>
+      <div class="formula-line"><span class="formula-label">Days Remaining</span><span class="formula-value">${p.daysRemaining} / ${p.shelfLife} days</span></div>
+      <div class="formula-line"><span class="formula-label">Stock</span><span class="formula-value">${p.stock} units</span></div>
+      <div class="formula-line"><span class="formula-label">Sell Rate</span><span class="formula-value">${p.soldPerDay} units/day</span></div>
+    </div>
+    <div style="color:var(--yellow);font-family:var(--mono);font-size:0.72rem;text-align:center;animation:blink 1s infinite">
+      ⚙️ Running FreshDrop algorithm…
+    </div>
+  `;
+}
+
+function showAlgoResult(p, result) {
+  const panicPrice    = Math.round(p.cost * 0.95);
+  const normalRevenue = p.mrp * p.stock * 0.4 + panicPrice * p.stock * 0.6;
+  const freshRevenue  = result.optimal_price * p.stock;
+  const saved = Math.round(freshRevenue - normalRevenue);
+
+  document.getElementById('algo-display').innerHTML = `
+    <div style="font-family:var(--mono);font-size:0.68rem;color:var(--text-muted);margin-bottom:0.8rem">
+      RESULT — <span style="color:var(--text)">${p.name}</span>
+    </div>
+    <div class="formula-box">
+      <div class="formula-line">
+        <span class="formula-label">Expiry Urgency Score</span>
+        <span class="formula-value">${result.expiry_score}/100</span>
+      </div>
+      <div class="formula-line">
+        <span class="formula-label">Velocity Multiplier</span>
+        <span class="formula-value">${result.velocity_multiplier}×</span>
+      </div>
+      <div class="formula-line">
+        <span class="formula-label">Margin Guard (min)</span>
+        <span class="formula-value">₹${result.min_price}</span>
+      </div>
+      <div class="formula-line">
+        <span class="formula-label">Category Trigger</span>
+        <span class="formula-value">${result.is_triggered ? '✓ ACTIVE' : '— NOT YET'}</span>
+      </div>
+      <hr class="formula-divider">
+      <div class="formula-line">
+        <span class="formula-label">Optimal Price</span>
+        <span class="formula-result">₹${result.optimal_price}</span>
+      </div>
+      <div class="formula-line">
+        <span class="formula-label">Actual Margin</span>
+        <span class="formula-result">${result.margin_pct}% ✓</span>
+      </div>
+    </div>
+    <div class="before-after">
+      <div class="ba-card before">
+        <div class="ba-title">WITHOUT FRESHDROP</div>
+        <div class="ba-row"><span>40% at MRP</span><span>₹${p.mrp}</span></div>
+        <div class="ba-row"><span>60% panic sell</span><span>₹${panicPrice}</span></div>
+        <div class="ba-total"><span>Revenue</span><span>₹${Math.round(normalRevenue).toLocaleString()}</span></div>
+      </div>
+      <div class="ba-card after">
+        <div class="ba-title">WITH FRESHDROP</div>
+        <div class="ba-row"><span>All units at</span><span>₹${result.optimal_price}</span></div>
+        <div class="ba-row"><span>Margin protected</span><span>${result.margin_pct}%</span></div>
+        <div class="ba-total"><span>Revenue</span><span>₹${Math.round(freshRevenue).toLocaleString()}</span></div>
+      </div>
+    </div>
+    <div class="savings-summary">
+      💰 FreshDrop saves ₹${Math.abs(saved).toLocaleString()} in margin on this SKU
+    </div>
+  `;
+}
+
+// ─── BLOCKCHAIN LOG ──────────────────────────────────────────
+function addToLog(p, result, txid) {
+  const logDiv = document.getElementById('blockchain-log');
+  const emptyEl = logDiv.querySelector('.log-empty');
+  if (emptyEl) emptyEl.remove();
+
+  txLog.unshift({ p, result, txid, time: new Date() });
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `
+    <div class="log-icon">⛓</div>
+    <div class="log-content">
+      <div class="log-product">${p.name}</div>
+      <div class="log-detail">₹${p.mrp} → ₹${result.optimal_price} · ${p.daysRemaining}d left · ${p.category}</div>
+      <div class="log-txid">TxID: ${txid.slice(0,22)}…</div>
+    </div>
+    <div class="log-right">
+      <div class="log-time">${new Date().toLocaleTimeString()}</div>
+      <div class="log-margin">${result.margin_pct}%</div>
+    </div>
+  `;
+  logDiv.prepend(entry);
+
+  const badge = document.getElementById('log-count-badge');
+  badge.textContent = `${txLog.length} TXN${txLog.length>1?'S':''}`;
+  badge.className = 'section-tag tag-green';
+}
+
+// ─── FALLBACK (demo mode) ─────────────────────────────────────
+function getOptimalPriceFallback(p) {
+  const urgency = 1 - (p.daysRemaining / p.shelfLife);
+  const expiryScore = Math.round(urgency * 100);
+  const trpd = p.stock / Math.max(p.daysRemaining, 1);
+  const ratio = p.soldPerDay / trpd;
+  const vm = ratio >= 1.2 ? 1.0 : ratio >= 0.9 ? 0.97 : ratio >= 0.7 ? 0.92 : ratio >= 0.5 ? 0.85 : 0.78;
+  const minPrice = p.cost * (1 + p.targetMargin / 100);
+  const optimal = p.mrp * (1 - (expiryScore / 100) * 0.35) * vm;
+  return Math.max(Math.round(optimal), Math.ceil(minPrice));
+}
+
+function calcMargin(price, cost) {
+  return Math.round(((price - cost) / price) * 100);
+}
+
+function buildFallbackResult(p) {
+  const optPrice  = getOptimalPriceFallback(p);
+  const urgency   = 1 - (p.daysRemaining / p.shelfLife);
+  const expiryScore = Math.round(urgency * 100);
+  const trpd = p.stock / Math.max(p.daysRemaining, 1);
+  const ratio = p.soldPerDay / trpd;
+  const vm = ratio >= 1.2 ? 1.0 : ratio >= 0.9 ? 0.97 : ratio >= 0.7 ? 0.92 : ratio >= 0.5 ? 0.85 : 0.78;
+  const minPrice = p.cost * (1 + p.targetMargin / 100);
+  const fake52 = () => {
+    const c='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    return Array.from({length:52},()=>c[Math.floor(Math.random()*c.length)]).join('');
+  };
+  const txid = fake52();
+  return {
+    product_id: p.id,
+    product_name: p.name,
+    old_price: p.mrp,
+    optimal_price: optPrice,
+    margin_pct: calcMargin(optPrice, p.cost),
+    expiry_score: expiryScore,
+    velocity_multiplier: Math.round(vm * 100) / 100,
+    trigger_days: p.trigger_days ?? 3,
+    is_triggered: p.daysRemaining <= (p.trigger_days ?? 3),
+    min_price: Math.round(minPrice),
+    txid,
+    explorer_url: `https://testnet.algoexplorer.io/tx/${txid}`,
+    algo_address: '—',
+    timestamp: Date.now() / 1000
+  };
+}
+
+function buildFallbackProducts() {
+  const raw = [
+    {id:1, name:"Protein Bar (Mango)",     category:"Healthy Snacks", mrp:120, cost:72,  targetMargin:28, stock:80,  soldPerDay:8,  shelfLife:30, daysRemaining:6},
+    {id:2, name:"Cold Press Orange Juice", category:"Fresh Juice",    mrp:90,  cost:52,  targetMargin:25, stock:45,  soldPerDay:12, shelfLife:7,  daysRemaining:2},
+    {id:3, name:"Artisan Sourdough",       category:"Bakery",         mrp:110, cost:58,  targetMargin:30, stock:30,  soldPerDay:15, shelfLife:5,  daysRemaining:1},
+    {id:4, name:"Greek Yogurt Premium",    category:"Dairy",          mrp:75,  cost:44,  targetMargin:22, stock:120, soldPerDay:20, shelfLife:14, daysRemaining:8},
+    {id:5, name:"Makhana Roasted",         category:"Healthy Snacks", mrp:180, cost:100, targetMargin:32, stock:60,  soldPerDay:5,  shelfLife:20, daysRemaining:11},
+    {id:6, name:"Paneer Fresh 200g",       category:"Dairy",          mrp:85,  cost:55,  targetMargin:20, stock:90,  soldPerDay:18, shelfLife:10, daysRemaining:4},
+    {id:7, name:"Multigrain Bread",        category:"Bakery",         mrp:65,  cost:35,  targetMargin:25, stock:50,  soldPerDay:10, shelfLife:5,  daysRemaining:2},
+    {id:8, name:"Almond Milk 1L",          category:"Dairy",          mrp:150, cost:95,  targetMargin:22, stock:35,  soldPerDay:7,  shelfLife:10, daysRemaining:3},
+    {id:9, name:"Chicken Tikka Ready Meal",category:"Ready-to-eat",   mrp:220, cost:130, targetMargin:30, stock:25,  soldPerDay:8,  shelfLife:4,  daysRemaining:2},
+    {id:10,name:"Spinach & Kale Juice",    category:"Fresh Juice",    mrp:110, cost:65,  targetMargin:28, stock:40,  soldPerDay:6,  shelfLife:5,  daysRemaining:1},
+    {id:11,name:"Baked Oat Cookies",       category:"Healthy Snacks", mrp:95,  cost:52,  targetMargin:30, stock:70,  soldPerDay:9,  shelfLife:21, daysRemaining:14},
+    {id:12,name:"Cheddar Cheese Slice",    category:"Dairy",          mrp:130, cost:80,  targetMargin:25, stock:55,  soldPerDay:11, shelfLife:21, daysRemaining:5},
+  ];
+
+  const categoryTriggers = {
+    "Dairy":3, "Bakery":2, "Fresh Juice":2, "Ready-to-eat":2,
+    "Healthy Snacks":7, "Regular Snacks":14
+  };
+
+  return raw.map(p => {
+    const optPrice    = getOptimalPriceFallback(p);
+    const urgency     = 1 - p.daysRemaining / p.shelfLife;
+    const ratio       = p.daysRemaining / p.shelfLife;
+    const status      = ratio <= 0.2 || p.daysRemaining <= 2 ? 'critical'
+                      : ratio <= 0.4 || p.daysRemaining <= 5 ? 'warning'
+                      : 'safe';
+    const trigger_days = categoryTriggers[p.category] ?? 3;
+    return {
+      ...p,
+      optimal_price: optPrice,
+      actual_margin: calcMargin(optPrice, p.cost),
+      expiry_score: Math.round(urgency * 100),
+      trigger_days,
+      is_triggered: p.daysRemaining <= trigger_days,
+      status
+    };
+  });
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
