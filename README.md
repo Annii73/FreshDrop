@@ -5,7 +5,15 @@ A **revenue management system for quick commerce perishables** that:
 - Calculates optimal prices using expiry timeline + sales velocity
 - Guards your target margin (never panic-sells)
 - Logs every price update as a **real Algorand Testnet transaction**
-- Shows blockchain proof via Algoexplorer
+- Shows blockchain proof via Lora (AlgoKit Explorer)
+
+---
+
+## 🌐 Live Demo
+
+- **Frontend:** https://annii73.github.io/FreshDrop/frontend/
+- **Backend API:** https://freshdrop-f6zi.onrender.com
+- **Blockchain Explorer:** https://lora.algokit.io/testnet
 
 ---
 
@@ -42,13 +50,13 @@ uvicorn main:app --reload --port 8000
 On first run you'll see:
 ```
 [Algorand] NEW wallet created: ABCDEF...XYZ
-[Algorand] Fund it at: https://bank.testnet.algorand.network/
+[Algorand] Fund it at: https://lora.algokit.io/testnet
 ```
 
 ### Step 3 — Fund the Algorand wallet
 
 1. Copy the wallet address printed in the terminal
-2. Go to https://bank.testnet.algorand.network/
+2. Go to https://lora.algokit.io/testnet → Fund section
 3. Paste the address and request test ALGO (takes ~10 seconds)
 
 Or run:
@@ -106,7 +114,7 @@ The frontend auto-connects to `http://localhost:8000`.
   "is_triggered": true,
   "min_price": 65.0,
   "txid": "ALGO_TXID_HERE",
-  "explorer_url": "https://testnet.algoexplorer.io/tx/ALGO_TXID_HERE",
+  "explorer_url": "https://lora.algokit.io/testnet/transaction/ALGO_TXID_HERE",
   "algo_address": "YOUR_WALLET",
   "timestamp": 1712345678.0
 }
@@ -164,7 +172,7 @@ finalPrice        = max(optimalPrice, minPrice)   ← margin guard
 }
 ```
 
-- Returns real TxID linkable on https://testnet.algoexplorer.io
+- Returns real TxID linkable on https://lora.algokit.io/testnet
 - Falls back to simulated TxID if wallet is not yet funded (demo still works)
 
 ---
@@ -188,7 +196,7 @@ This means you can open `index.html` directly for a hackathon demo without any s
 - [x] Category-based trigger system
 - [x] Optimize Price button with algorithm breakdown
 - [x] Real Algorand Testnet transaction logging
-- [x] Blockchain explorer proof link
+- [x] Blockchain explorer proof link (via Lora AlgoKit)
 - [x] Blockchain log panel
 - [x] Before vs after revenue comparison
 - [x] Total margin saved tracker
