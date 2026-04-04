@@ -12,7 +12,7 @@ from algosdk.transaction import PaymentTxn
 
 ALGOD_ADDRESS = "https://testnet-api.algonode.cloud"
 ALGOD_TOKEN   = ""          # Algonode public endpoint — no token needed
-EXPLORER_BASE = "https://testnet.algoexplorer.io/tx"
+EXPLORER_BASE = "https://lora.algokit.io/testnet/transaction"
 
 # Wallet file — persists between runs
 WALLET_FILE = "algo_wallet.json"
