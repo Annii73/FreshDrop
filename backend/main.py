@@ -139,7 +139,7 @@ async def optimize_price(req: OptimizeRequest):
 def get_wallet():
     return {
         "address": algo_service.address,
-        "explorer": f"https://testnet.algoexplorer.io/address/{algo_service.address}",
+        "explorer": f"https://lora.algokit.io/testnet/account/{algo_service.address},
         "faucet": "https://bank.testnet.algorand.network/"
     }
 
